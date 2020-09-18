@@ -1,37 +1,37 @@
-//#load "PerfectSquares.fs"
-//#time
-//printfn "%A" (PerfectSquares.myFunction 1 2)
-
-// ActorSayHello.fsx
+#load "references.fsx"
 #time "on"
-#r "nuget: Akka.FSharp" 
-#r "nuget: Akka.TestKit" 
-// #load "Bootstrap.fsx"
 
 open System
 open Akka.Actor
 open Akka.Configuration
 open Akka.FSharp
-open Akka.TestKit
 
-// #Using Actor
-// Actors are one of Akka's concurrent models.
-// An Actor is a like a thread instance with a mailbox. 
-// It can be created with system.ActorOf: use receive to get a message, and <! to send a message.
-// This example is an EchoServer which can receive messages then print them.
+// if (fsi.CommandLineArgs.Length<>2) 
+//     then printfn "Invalid number of arguments"
+// else 
 
 let system = ActorSystem.Create("FSharp")
+let maxNum = fsi.CommandLineArgs.[1] |> int
+let len = fsi.CommandLineArgs.[2] |> int
 
-type EchoServer =
-    inherit Actor
 
+let sumOfSquares numberList = numberList |> List.sumBy (fun x -> x * x)
+let isPerfectSquare (number:int) = sqrt (float number) |> fun n -> (n = floor(n))
+
+type EchoServer(name) =
+    inherit Actor()
     override x.OnReceive message =
-        match message with
-        | :? string as msg -> printfn "Hello %s" msg
-        | _ ->  failwith "unknown message"
+       match message with
+        | :? int as n -> sumOfSquares [n .. n+len] |> fun sq -> if(isPerfectSquare sq) then printfn "%i" (int (sqrt (float sq)))
+        | _ -> failwith "unknown message"
 
-let echoServer = system.ActorOf(Props(typedefof<EchoServer>, Array.empty))
+let echoServers =
+    [ 1 .. maxNum-len ] |> List.map (fun id ->
+        let properties = [| string (id) :> obj |]
+        system.ActorOf(Props(typedefof<EchoServer>, properties)))
 
-echoServer <! "F#!"
+
+for n in [ 1 .. maxNum-len ] do
+    List.last echoServers <! n
 
 system.Terminate()
