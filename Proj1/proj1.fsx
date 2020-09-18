@@ -20,18 +20,24 @@ let isPerfectSquare (number:int) = sqrt (float number) |> fun n -> (n = floor(n)
 
 type EchoServer(name) =
     inherit Actor()
+    
     override x.OnReceive message =
        match message with
-        | :? int as n -> sumOfSquares [n .. n+len] |> fun sq -> if(isPerfectSquare sq) then printfn "%i" (int (sqrt (float sq)))
+        | :? int as n -> 
+            sumOfSquares [n .. n+len-1] |> fun sq -> if(isPerfectSquare sq) then printfn "%i" n
         | _ -> failwith "unknown message"
 
 let echoServers =
-    [ 1 .. maxNum-len ] |> List.map (fun id ->
+    [ 1 .. maxNum ] |> List.map (fun id ->
         let properties = [| string (id) :> obj |]
         system.ActorOf(Props(typedefof<EchoServer>, properties)))
 
+let actorRef = echoServers
+// printfn "%A" actorRef
+let mutable m = 1
+for ref in actorRef do
+    ref <! m
+    m <- m+1
 
-for n in [ 1 .. maxNum-len ] do
-    List.last echoServers <! n
-
+Console.Read() |> ignore
 system.Terminate()
