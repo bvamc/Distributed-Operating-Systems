@@ -45,7 +45,7 @@ type EchoServer(name) =
             for k in [rangeStart .. rangeEnd] do
                 sumOfSquares [k .. (k + uint64(len-1))] |> fun sq -> if(isPerfectSquare sq) then printActor <! k
             
-            if rangeEnd + uint64(workUnit * workUnit) > uint64(maxNum) then
+            if rangeEnd + uint64(workUnit * numberOfActors) > uint64(maxNum) then
                 count <- count + 1
         | _ -> failwith "unknown message"
 
