@@ -14,7 +14,7 @@ let system = ActorSystem.Create("FSharp")
 let maxNum = fsi.CommandLineArgs.[1] |> int
 let len = fsi.CommandLineArgs.[2] |> int
 
-let numberOfActors = 8
+let numberOfActors = Environment.ProcessorCount
 let workUnit = 100
 
 let sumOfSquares numberList = numberList |> List.sumBy (fun x -> x * x)
