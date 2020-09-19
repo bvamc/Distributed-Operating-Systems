@@ -69,7 +69,7 @@ for num in [0 .. temp] do
     actorRef.Item(cur) <! uint64(num)
 
 
-while count <> numberOfActors do
+while count < numberOfActors do
     cur <- cur 
 
 system.Terminate |> ignore
