@@ -43,7 +43,7 @@ type CountServer(name) =
 let countProperties = [| "counter" :> obj |]
 let countActor = system.ActorOf(Props(typedefof<CountServer>, countProperties))
 
-type EchoServer(name) =
+type ActorServer(name) =
     inherit Actor()
     
     override x.OnReceive message =
@@ -60,13 +60,13 @@ type EchoServer(name) =
 
 
 //Create list of actors
-let echoServers =
+let actorServers =
     [ 1 .. numberOfActors ] |> List.map (fun id ->
         let properties = [| string (id) :> obj |]
-        system.ActorOf(Props(typedefof<EchoServer>, properties)))
+        system.ActorOf(Props(typedefof<ActorServer>, properties)))
 
 
-let actorRef = echoServers
+let actorRef = actorServers
 let mutable cur = 0
 let rangeCount = maxNum/workUnit
 

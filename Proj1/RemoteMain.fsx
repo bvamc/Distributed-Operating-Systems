@@ -58,6 +58,6 @@ let echoServer =
         loop()
 
 for n in [1 .. 2] do
-    Async.RunSynchronously ((system.ActorSelection("akka.tcp://RemoteActorSystem@localhost:8777/user/Distributor") <? string(n)), 1000)
+    Async.RunSynchronously ((system.ActorSelection("akka.tcp://RemoteActorSystem@24.250.161.160:8777/user/Distributor") <? string(n)), 1000)
 
 Console.Read() |> ignore
