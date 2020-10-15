@@ -3,24 +3,30 @@
 
 open System
 open Akka.Actor
+open Akka.Configuration
 open Akka.FSharp
+open System.Collections.Generic
+
 
 let sw = Diagnostics.Stopwatch()
 
 let mutable numOfNodes =
     int (string (fsi.CommandLineArgs.GetValue 1))
+
 let topology = string (fsi.CommandLineArgs.GetValue 2)
 let protocol = string (fsi.CommandLineArgs.GetValue 3)
 
 type MessageType =
     | Initialize of IActorRef []
-    | IntializeAll of IActorRef []
-    | DoGossip of String
-    | ReportRumourRecv of String
-    | DoPushSum of Double
+    | IntializeFull of IActorRef []
+    | StartGossip of String
+    | ReportMsgRecvd of String
+    | StartPushSum of Double
     | ComputePushSum of Double * Double * Double
     | Result of Double * Double
-    | SetNumNodes of int
+    | RecordNumPeople of int
+
+let rnd = System.Random(1)
 
 type Listener() =
     inherit Actor()
@@ -29,11 +35,15 @@ type Listener() =
 
     override x.OnReceive(rmsg) =
         match rmsg :?> MessageType with
-        | ReportRumourRecv message ->
+        | ReportMsgRecvd message ->
+            let endTime =
+                System.DateTime.Now.TimeOfDay.Milliseconds
+
             msgRecieved <- msgRecieved + 1
             if msgRecieved = numPeople then
+                printfn "Hearing Actor %i" msgRecieved
                 sw.Stop()
-                printfn "Time taken for convergence: %O" sw.Elapsed
+                printfn "Time for convergence: %O" sw.Elapsed
                 Environment.Exit(0)
 
 
@@ -47,14 +57,14 @@ type Listener() =
                 printfn "Time for convergence: %O" sw.Elapsed
                 Environment.Exit(0)
 
-        | SetNumNodes numpeople -> numPeople <- numpeople
+        | RecordNumPeople numpeople -> numPeople <- numpeople
         | _ -> ()
 
 type Node(listener: IActorRef, numResend: int, nodeNum: int) =
     inherit Actor()
     let mutable numMsgHeard = 0
-    let mutable neighbourNodes: IActorRef [] = [||]
-    let mutable totalNodes: IActorRef [] = [||]
+    let mutable neighbours: IActorRef [] = [||]
+    let mutable fullNeighbours: IActorRef [] = [||]
     //used for push sum
     let mutable sum1 = nodeNum |> float
     let mutable weight = 1.0
@@ -65,45 +75,49 @@ type Node(listener: IActorRef, numResend: int, nodeNum: int) =
 
     override x.OnReceive(num) =
         match num :?> MessageType with
-        | Initialize arrRef -> neighbourNodes <- arrRef
-        | IntializeAll arrRef -> totalNodes <- arrRef
-        | DoGossip rumour ->
+        | Initialize aref -> neighbours <- aref
+        | IntializeFull aref -> fullNeighbours <- aref
+        | StartGossip msg ->
             numMsgHeard <- numMsgHeard + 1
-            if (numMsgHeard = 1) then listener <! ReportRumourRecv(rumour)
+            if (numMsgHeard = 1) then listener <! ReportMsgRecvd(msg)
+
             if (numMsgHeard <= 10 * numOfNodes) then
+
                 if (topology <> "imp2D") then
                     let index =
-                        System.Random().Next(0, neighbourNodes.Length)
-                    neighbourNodes.[index] <! DoGossip(rumour)
+                        System.Random().Next(0, neighbours.Length)
+
+                    neighbours.[index] <! StartGossip(msg)
                 else
                     let index = System.Random().Next(0, 5)
                     if (index < 4) then
                         let nindex =
-                            System.Random().Next(0, neighbourNodes.Length)
-                        neighbourNodes.[nindex] <! DoGossip(rumour)
+                            System.Random().Next(0, neighbours.Length)
+
+                        neighbours.[nindex] <! StartGossip(msg)
                     else
                         let mutable fullindex = System.Random().Next(0, numOfNodes - 1)
                         while (fullindex = nodeNum) do
                             fullindex <- System.Random().Next(0, numOfNodes - 1)
-                        totalNodes.[fullindex] <! DoGossip(rumour)
+                        fullNeighbours.[fullindex] <! StartGossip(msg)
 
-        | DoPushSum delta ->
+        | StartPushSum delta ->
             let index =
-                System.Random().Next(0, neighbourNodes.Length)
+                System.Random().Next(0, neighbours.Length)
 
             sum1 <- sum1 / 2.0
             weight <- weight / 2.0
-            neighbourNodes.[index]
+            neighbours.[index]
             <! ComputePushSum(sum1, weight, delta)
 
         | ComputePushSum (s: float, w, delta) ->
             let newsum = sum1 + s
             let newweight = weight + w
 
-            let ratioDifference =
+            let cal =
                 sum1 / weight - newsum / newweight |> abs
 
-            if (ratioDifference > delta) then
+            if (cal > delta) then
                 termRound <- 0
                 sum1 <- sum1 + s
                 weight <- weight + w
@@ -111,23 +125,23 @@ type Node(listener: IActorRef, numResend: int, nodeNum: int) =
                 weight <- weight / 2.0
                 if (topology <> "imp2D") then
                     let index =
-                        System.Random().Next(0, neighbourNodes.Length)
+                        System.Random().Next(0, neighbours.Length)
 
-                    neighbourNodes.[index]
+                    neighbours.[index]
                     <! ComputePushSum(sum1, weight, delta)
                 else
                     let index = System.Random().Next(0, 5)
                     if (index < 4) then
                         let nindex =
-                            System.Random().Next(0, neighbourNodes.Length)
+                            System.Random().Next(0, neighbours.Length)
 
-                        neighbourNodes.[nindex]
+                        neighbours.[nindex]
                         <! ComputePushSum(sum1, weight, delta)
                     else
                         let mutable fullindex = System.Random().Next(0, numOfNodes - 1)
                         while (fullindex = nodeNum) do
                             fullindex <- System.Random().Next(0, numOfNodes - 1)
-                        totalNodes.[fullindex]
+                        fullNeighbours.[fullindex]
                         <! ComputePushSum(sum1, weight, delta)
             //elif (termRound>=3) then
             else
@@ -143,23 +157,23 @@ type Node(listener: IActorRef, numResend: int, nodeNum: int) =
                 termRound <- termRound + 1
                 if (topology <> "imp2D") then
                     let index =
-                        System.Random().Next(0, neighbourNodes.Length)
+                        System.Random().Next(0, neighbours.Length)
 
-                    neighbourNodes.[index]
+                    neighbours.[index]
                     <! ComputePushSum(sum1, weight, delta)
                 else
                     let index = System.Random().Next(0, 5)
                     if (index < 4) then
                         let nindex =
-                            System.Random().Next(0, neighbourNodes.Length)
+                            System.Random().Next(0, neighbours.Length)
 
-                        neighbourNodes.[nindex]
+                        neighbours.[nindex]
                         <! ComputePushSum(sum1, weight, delta)
                     else
                         let mutable fullindex = System.Random().Next(0, numOfNodes - 1)
                         while (fullindex = nodeNum) do
                             fullindex <- System.Random().Next(0, numOfNodes - 1)
-                        totalNodes.[fullindex]
+                        fullNeighbours.[fullindex]
                         <! ComputePushSum(sum1, weight, delta)
 
 
@@ -180,30 +194,28 @@ numOfNodes =
     then int (floor ((actualNumOfNodes ** 0.5) ** 2.0))
     else numOfNodes
 
-let nodeList = [ 0 .. numOfNodes ] 
 
 let listener =
     system.ActorOf(Props.Create(typeof<Listener>), "listener")
 
 match topology with
 | "full" ->
-    let nodeArrayOfActors = Array.zeroCreate (numOfNodes + 1)
-    for i in nodeList do
-        nodeArrayOfActors.[i] <- system.ActorOf(Props.Create(typeof<Node>, listener, 10, i + 1), "demo" + string (i))
-    for i in nodeList do
-        nodeArrayOfActors.[i] <! Initialize(nodeArrayOfActors)
+    let nodeArray = Array.zeroCreate (numOfNodes + 1)
+    for i in [ 0 .. numOfNodes ] do
+        nodeArray.[i] <- system.ActorOf(Props.Create(typeof<Node>, listener, 10, i + 1), "demo" + string (i))
+    for i in [ 0 .. numOfNodes ] do
+        nodeArray.[i] <! Initialize(nodeArray)
 
     let leader = System.Random().Next(0, numOfNodes)
     if protocol = "gossip" then
-        listener <! SetNumNodes(numOfNodes)
+        listener <! RecordNumPeople(numOfNodes)
         sw.Start()
-        printfn "Starting Protocol Gossip for full topology"
-        nodeArrayOfActors.[leader] <! DoGossip("Hello")
+        printfn "Starting Protocol Gossip"
+        nodeArray.[leader] <! StartGossip("Hello")
     else if protocol = "push-sum" then
         sw.Start()
-        printfn "Starting Push Protocol for full topology"
-        nodeArrayOfActors.[leader] <! DoPushSum(10.0 ** -10.0)
-
+        printfn "Starting Push Protocol"
+        nodeArray.[leader] <! StartPushSum(10.0 ** -10.0)
 
 | "line" ->
     let nodeArray = Array.zeroCreate (numOfNodes)
@@ -222,17 +234,16 @@ match topology with
 
         nodeArray.[i] <! Initialize(neighbourArray)
     let leader = System.Random().Next(0, numOfNodes)
-    listener <! SetNumNodes(numOfNodes)
+    listener <! RecordNumPeople(numOfNodes)
     if protocol = "gossip" then
         sw.Start()
-        printfn "Starting Protocol Gossip for line topology"
+        printfn "Starting Protocol Gossip"
         nodeArray.[leader]
-        <! DoGossip("This is Line Topology")
+        <! StartGossip("This is Line Topology")
     else if protocol = "push-sum" then
         sw.Start()
-        printfn "Starting Push Sum Protocol for line topology"
-        nodeArray.[leader] <! DoPushSum(10.0 ** -10.0)
-
+        printfn "Starting Push Sum Protocol for Line"
+        nodeArray.[leader] <! StartPushSum(10.0 ** -10.0)
 
 
 | "2D" ->
@@ -260,16 +271,15 @@ match topology with
 
     let leader = System.Random().Next(0, totGrid - 1)
     if protocol = "gossip" then
-        listener <! SetNumNodes(totGrid - 1)
+        listener <! RecordNumPeople(totGrid - 1)
         sw.Start()
-        printfn "Starting Protocol Gossip for 2D topology"
+        printfn "Starting Protocol Gossip"
         nodeArray.[leader]
-        <! DoGossip("This is 2D Topology")
+        <! StartGossip("This is 2D Topology")
     else if protocol = "push-sum" then
         sw.Start()
-        printfn "Starting Push Sum Protocol for 2D topology"
-        nodeArray.[leader] <! DoPushSum(10.0 ** -10.0)
-
+        printfn "Starting Push Sum Protocol for Line"
+        nodeArray.[leader] <! StartPushSum(10.0 ** -10.0)
 
 | "imp2D" ->
     let gridSize = int (ceil (sqrt actualNumOfNodes))
@@ -292,20 +302,19 @@ match topology with
             nodeArray.[i * gridSize + j]
             <! Initialize(neighbours)
             nodeArray.[i * gridSize + j]
-            <! IntializeAll(nodeArray)
+            <! IntializeFull(nodeArray)
 
     let leader = System.Random().Next(0, totGrid - 1)
     if protocol = "gossip" then
-        listener <! SetNumNodes(totGrid - 1)
+        listener <! RecordNumPeople(totGrid - 1)
         sw.Start()
-        printfn "Starting Protocol Gossip for imp2D topology"
+        printfn "Starting Protocol Gossip"
         nodeArray.[leader]
-        <! DoGossip("This is imp2D Topology")
+        <! StartGossip("This is imp2D Topology")
     else if protocol = "push-sum" then
         sw.Start()
-        printfn "Starting Push Sum Protocol for imp2D topology"
-        nodeArray.[leader] <! DoPushSum(10.0 ** -10.0)
-
+        printfn "Starting Push Sum Protocol for Line"
+        nodeArray.[leader] <! StartPushSum(10.0 ** -10.0)
 
 | _ -> ()
 
