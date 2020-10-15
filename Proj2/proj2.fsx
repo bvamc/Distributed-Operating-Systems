@@ -39,7 +39,7 @@ type Receiver() =
         | TerminationCheck (sum, weight) ->
             printfn "Sum = %f Weight= %f Average=%f" sum weight (sum / weight)
             numberOfRumoursReceived <- numberOfRumoursReceived + 1
-            printfn "Hearing Actor %i %i" numberOfRumoursReceived nodesCount
+            // printfn "Hearing Actor %i %i" numberOfRumoursReceived nodesCount
             if numberOfRumoursReceived = nodesCount then
                 clock.Stop()
                 printfn "Answer! Sum = %f Weight= %f Average=%f" sum weight (sum / weight)
@@ -59,8 +59,6 @@ type Node(listener: IActorRef, numResend: int, nodeNum: int) =
     let mutable weight = 1.0
     let mutable epochCount = 1
     let mutable convergence = false
-
-
 
     override x.OnReceive(num) =
         match num :?> MessageType with
@@ -188,13 +186,13 @@ match topology with
 | "full" ->
     let nodeArrayOfActors = Array.zeroCreate (nodesCount + 1)
     for i in nodeList do
-        nodeArrayOfActors.[i] <- system.ActorOf(Props.Create(typeof<Node>, listener, 10, i + 1), "demo" + string (i))
+        nodeArrayOfActors.[i] <- system.ActorOf(Props.Create(typeof<Node>, receiver, 10, i + 1), "demo" + string (i))
     for i in nodeList do
         nodeArrayOfActors.[i] <! Initialize(nodeArrayOfActors)
 
     let leader = System.Random().Next(0, nodesCount)
     if protocol = "gossip" then
-        listener <! SetNumNodes(nodesCount)
+        receiver <! SetNumNodes(nodesCount)
         clock.Start()
         printfn "Starting Protocol Gossip for full topology"
         nodeArrayOfActors.[leader] <! DoGossip("Hello")
@@ -203,11 +201,10 @@ match topology with
         printfn "Starting Push Protocol for full topology"
         nodeArrayOfActors.[leader] <! DoPushSum(10.0 ** -10.0)
 
-
 | "line" ->
     let nodeArray = Array.zeroCreate (nodesCount)
     for i in [ 0 .. nodesCount - 1 ] do
-        nodeArray.[i] <- system.ActorOf(Props.Create(typeof<Node>, listener, 10, i + 1), "demo" + string (i))
+        nodeArray.[i] <- system.ActorOf(Props.Create(typeof<Node>, receiver, 10, i + 1), "demo" + string (i))
     for i in [ 0 .. nodesCount - 1 ] do
         let mutable neighbourArray: IActorRef [] = [||]
         if i = 0 then
@@ -221,7 +218,7 @@ match topology with
 
         nodeArray.[i] <! Initialize(neighbourArray)
     let leader = System.Random().Next(0, nodesCount)
-    listener <! SetNumNodes(nodesCount)
+    receiver <! SetNumNodes(nodesCount)
     if protocol = "gossip" then
         clock.Start()
         printfn "Starting Protocol Gossip for line topology"
@@ -239,7 +236,7 @@ match topology with
     let totGrid = gridSize * gridSize
     let nodeArray = Array.zeroCreate (totGrid)
     for i in [ 0 .. (gridSize * gridSize - 1) ] do
-        nodeArray.[i] <- system.ActorOf(Props.Create(typeof<Node>, listener, 10, i + 1), "demo" + string (i))
+        nodeArray.[i] <- system.ActorOf(Props.Create(typeof<Node>, receiver, 10, i + 1), "demo" + string (i))
 
     for i in [ 0 .. gridSize - 1 ] do
         for j in [ 0 .. gridSize - 1 ] do
@@ -259,7 +256,7 @@ match topology with
 
     let leader = System.Random().Next(0, totGrid - 1)
     if protocol = "gossip" then
-        listener <! SetNumNodes(totGrid - 1)
+        receiver <! SetNumNodes(totGrid - 1)
         clock.Start()
         printfn "Starting Protocol Gossip for 2D topology"
         nodeArray.[leader]
@@ -275,7 +272,7 @@ match topology with
     let totGrid = gridSize * gridSize
     let nodeArray = Array.zeroCreate (totGrid)
     for i in [ 0 .. (gridSize * gridSize - 1) ] do
-        nodeArray.[i] <- system.ActorOf(Props.Create(typeof<Node>, listener, 10, i + 1), "demo" + string (i))
+        nodeArray.[i] <- system.ActorOf(Props.Create(typeof<Node>, receiver, 10, i + 1), "demo" + string (i))
 
     for i in [ 0 .. gridSize - 1 ] do
         for j in [ 0 .. gridSize - 1 ] do
@@ -295,7 +292,7 @@ match topology with
 
     let leader = System.Random().Next(0, totGrid - 1)
     if protocol = "gossip" then
-        listener <! SetNumNodes(totGrid - 1)
+        receiver <! SetNumNodes(totGrid - 1)
         clock.Start()
         printfn "Starting Protocol Gossip for imp2D topology"
         nodeArray.[leader]
