@@ -11,6 +11,8 @@ let mutable nodesCount =
     int (string (fsi.CommandLineArgs.GetValue 1))
 let topology = string (fsi.CommandLineArgs.GetValue 2)
 let protocol = string (fsi.CommandLineArgs.GetValue 3)
+let fanout = 5
+let failPercentage = 10.00
 
 type MessageType =
     | Initialize of IActorRef []
@@ -21,6 +23,7 @@ type MessageType =
     | ComputePushSum of Double * Double * Double
     | TerminationCheck of Double * Double
     | SetNumNodes of int
+    | SetNodeToBeFailed of Boolean
 
 type Receiver() =
     inherit Actor()
@@ -30,8 +33,10 @@ type Receiver() =
     override x.OnReceive(rmsg) =
         match rmsg :?> MessageType with
         | ReportRumourRecv message ->
+            let failedCount = int( (float(nodesCount) * (failPercentage / 100.0)))
             numberOfRumoursReceived <- numberOfRumoursReceived + 1
-            if numberOfRumoursReceived = numberOfNodes then
+            printfn "%i" numberOfRumoursReceived
+            if numberOfRumoursReceived = numberOfNodes - failedCount then
                 clock.Stop()
                 printfn "Time taken for convergence: %O" clock.Elapsed
                 Environment.Exit(0)
@@ -59,30 +64,36 @@ type Node(listener: IActorRef, numResend: int, nodeNum: int) =
     let mutable weight = 1.0
     let mutable epochCount = 1
     let mutable convergence = false
+    let mutable isFailed = false
 
     override x.OnReceive(num) =
         match num :?> MessageType with
         | Initialize arrRef -> neighbourNodes <- arrRef
         | IntializeAll arrRef -> totalNodes <- arrRef
+        | SetNodeToBeFailed boolVal -> 
+            printfn " Failed Node %i " nodeNum
+            isFailed <- boolVal
         | DoGossip rumour ->
-            numMsgHeard <- numMsgHeard + 1
-            if (numMsgHeard = 1) then listener <! ReportRumourRecv(rumour)
-            if (numMsgHeard <= 10 * nodesCount) then
-                if (topology <> "imp2D") then
-                    let index =
-                        System.Random().Next(0, neighbourNodes.Length)
-                    neighbourNodes.[index] <! DoGossip(rumour)
-                else
-                    let index = System.Random().Next(0, 5)
-                    if (index < 4) then
-                        let nindex =
-                            System.Random().Next(0, neighbourNodes.Length)
-                        neighbourNodes.[nindex] <! DoGossip(rumour)
-                    else
-                        let mutable fullindex = System.Random().Next(0, nodesCount - 1)
-                        while (fullindex = nodeNum) do
-                            fullindex <- System.Random().Next(0, nodesCount - 1)
-                        totalNodes.[fullindex] <! DoGossip(rumour)
+            if (not isFailed) then
+                numMsgHeard <- numMsgHeard + 1
+                if (numMsgHeard = 1) then listener <! ReportRumourRecv(rumour)
+                if (numMsgHeard <= 10 * nodesCount) then
+                    for times in [1..fanout] do
+                        if (topology <> "imp2D") then
+                            let index =
+                                System.Random().Next(0, neighbourNodes.Length)
+                            neighbourNodes.[index] <! DoGossip(rumour)
+                        else
+                            let index = System.Random().Next(0, 5)
+                            if (index < 4) then
+                                let nindex =
+                                    System.Random().Next(0, neighbourNodes.Length)
+                                neighbourNodes.[nindex] <! DoGossip(rumour)
+                            else
+                                let mutable fullindex = System.Random().Next(0, nodesCount - 1)
+                                while (fullindex = nodeNum) do
+                                    fullindex <- System.Random().Next(0, nodesCount - 1)
+                                totalNodes.[fullindex] <! DoGossip(rumour)
 
         | DoPushSum delta ->
             let index =
@@ -190,7 +201,13 @@ match topology with
     for i in nodeList do
         nodeArrayOfActors.[i] <! Initialize(nodeArrayOfActors)
 
+    let failedCount = int( (float(nodesCount) * (failPercentage / 100.0)))
+    for f in [1..failedCount] do
+        let fnode = System.Random().Next(0, nodesCount)
+        nodeArrayOfActors.[fnode] <! SetNodeToBeFailed true
+
     let leader = System.Random().Next(0, nodesCount)
+    printfn "leader %i" leader
     if protocol = "gossip" then
         receiver <! SetNumNodes(nodesCount)
         clock.Start()
@@ -219,6 +236,10 @@ match topology with
         nodeArray.[i] <! Initialize(neighbourArray)
     let leader = System.Random().Next(0, nodesCount)
     receiver <! SetNumNodes(nodesCount)
+    let failedCount = int( (float(nodesCount) * (failPercentage / 100.0)))
+    for f in [1..failedCount] do
+        let fnode = System.Random().Next(0, nodesCount)
+        nodeArray.[fnode] <! SetNodeToBeFailed true
     if protocol = "gossip" then
         clock.Start()
         printfn "Starting Protocol Gossip for line topology"
@@ -255,6 +276,10 @@ match topology with
 
 
     let leader = System.Random().Next(0, totGrid - 1)
+    let failedCount = int( (float(nodesCount) * (failPercentage / 100.0)))
+    for f in [1..failedCount] do
+        let fnode = System.Random().Next(0, nodesCount)
+        nodeArray.[fnode] <! SetNodeToBeFailed true
     if protocol = "gossip" then
         receiver <! SetNumNodes(totGrid - 1)
         clock.Start()
@@ -291,6 +316,10 @@ match topology with
             <! IntializeAll(nodeArray)
 
     let leader = System.Random().Next(0, totGrid - 1)
+    let failedCount = int( (float(nodesCount) * (failPercentage / 100.0)))
+    for f in [1..failedCount] do
+        let fnode = System.Random().Next(0, nodesCount)
+        nodeArray.[fnode] <! SetNodeToBeFailed true
     if protocol = "gossip" then
         receiver <! SetNumNodes(totGrid - 1)
         clock.Start()
