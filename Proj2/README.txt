@@ -1,16 +1,21 @@
-usage:
-    dotnet fsi proj2.fsx numNodes topology algorithm	
-    for bonus
-    dotnet fsi proj2Bonus.fsx numNodes topology algorithm
+Team Members:
+	Venkata Gowtham, Avula - UFID: 3110-8121
+	Vamsidhar Reddy, Bada  - UFID: 9212-7261
+
+Usage:
+    - dotnet fsi proj2.fsx numNodes topology algorithm	
+    
+    For bonus
+    - dotnet fsi proj2Bonus.fsx numNodes topology algorithm
 
 
 What is working:
-    1. 	Convergence of Gossip and Push-Sum algorithms for all 4 topologies.
+    	1.Convergence of Gossip and Push-Sum algorithms for all 4 topologies.
 	
 	Bonus part:
-	3. Implementation of node failure for both algorithms in all 4 topologies.
+	2. Implementation of node failure for both algorithms in all 4 topologies.
 
-Largest network dealed with:
+Largest network dealt with:
 
 	1. For Gossip algorithm:
 		a) Full network topology: 10000000 nodes 
