@@ -5,17 +5,15 @@ usage:
 
 
 What is working:
-    1. 	Convergence of Gossip and Push-Sum algorithms for all 4 topologies.
-	
-	Bonus part:
-	3. Implementation of node failure for both algorithms in all 4 topologies.
+    Convergence of Gossip and Push-Sum algorithms for all 4 topologies.
+	Bonus part: Implementation of node failure for both algorithms in all 4 topologies.
 
 Largest network dealed with:
 
 	1. For Gossip algorithm:
-		a) Full network topology: 10000000 nodes 
-		b) 2D network topology: 10000000 nodes
-		c) Imperfect 2D topology: 10000000 nodes
+		a) Full network topology: 1000000 nodes 
+		b) 2D network topology: 1000000 nodes
+		c) Imperfect 2D topology: 1000000 nodes
 		d) Line topology: 10000 nodes
 
 	2. For Push-Sum algorithm:

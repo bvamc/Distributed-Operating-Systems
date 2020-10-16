@@ -11,8 +11,8 @@ let mutable nodesCount =
     int (string (fsi.CommandLineArgs.GetValue 1))
 let topology = string (fsi.CommandLineArgs.GetValue 2)
 let protocol = string (fsi.CommandLineArgs.GetValue 3)
-let fanout = 5
-let failPercentage = 10.00
+let fanout = 2
+let failPercentage = 32.00
 
 type MessageType =
     | Initialize of IActorRef []
@@ -23,19 +23,21 @@ type MessageType =
     | ComputePushSum of Double * Double * Double
     | TerminationCheck of Double * Double
     | SetNumNodes of int
+    | IncrementConvergedNodes of int
     | SetNodeToBeFailed of Boolean
 
 type Receiver() =
     inherit Actor()
     let mutable numberOfRumoursReceived = 0
     let mutable numberOfNodes = 0
+    let mutable numberOfConvergedNodes = 0
 
     override x.OnReceive(rmsg) =
         match rmsg :?> MessageType with
         | ReportRumourRecv message ->
             let failedCount = int( (float(nodesCount) * (failPercentage / 100.0)))
             numberOfRumoursReceived <- numberOfRumoursReceived + 1
-            printfn "%i" numberOfRumoursReceived
+            // printfn "%i" numberOfRumoursReceived
             if numberOfRumoursReceived = numberOfNodes - failedCount then
                 clock.Stop()
                 printfn "Time taken for convergence: %O" clock.Elapsed
@@ -52,6 +54,9 @@ type Receiver() =
                 Environment.Exit(0)
 
         | SetNumNodes numberofnodes -> numberOfNodes <- numberofnodes
+        | IncrementConvergedNodes count -> 
+            numberOfConvergedNodes <- numberOfConvergedNodes+1
+            printfn "Converged %i nodes" numberOfConvergedNodes
         | _ -> failwith "unknown message"
 
 type Node(listener: IActorRef, numResend: int, nodeNum: int) =
@@ -94,6 +99,8 @@ type Node(listener: IActorRef, numResend: int, nodeNum: int) =
                                 while (fullindex = nodeNum) do
                                     fullindex <- System.Random().Next(0, nodesCount - 1)
                                 totalNodes.[fullindex] <! DoGossip(rumour)
+            else listener <! IncrementConvergedNodes(1)
+                               
 
         | DoPushSum delta ->
             let index =

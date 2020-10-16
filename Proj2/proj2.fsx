@@ -54,8 +54,7 @@ type Node(listener: IActorRef, numResend: int, nodeNum: int) =
     let mutable numMsgHeard = 0
     let mutable neighbourNodes: IActorRef [] = [||]
     let mutable totalNodes: IActorRef [] = [||]
-    //used for push sum
-    let mutable sum1 = nodeNum |> float
+    let mutable sum = nodeNum |> float
     let mutable weight = 1.0
     let mutable epochCount = 1
     let mutable convergence = false
@@ -88,30 +87,30 @@ type Node(listener: IActorRef, numResend: int, nodeNum: int) =
             let index =
                 System.Random().Next(0, neighbourNodes.Length)
 
-            sum1 <- sum1 / 2.0
+            sum <- sum / 2.0
             weight <- weight / 2.0
             neighbourNodes.[index]
-            <! ComputePushSum(sum1, weight, delta)
+            <! ComputePushSum(sum, weight, delta)
 
         | ComputePushSum (s: float, w, delta) ->
-            let newsum = sum1 + s
+            let newsum = sum + s
             let newweight = weight + w
 
             let ratioDifference =
-                sum1 / weight - newsum / newweight |> abs
+                sum / weight - newsum / newweight |> abs
 
             if (ratioDifference > delta) then
                 epochCount <- 0
-                sum1 <- sum1 + s
+                sum <- sum + s
                 weight <- weight + w
-                sum1 <- sum1 / 2.0
+                sum <- sum / 2.0
                 weight <- weight / 2.0
                 if (topology <> "imp2D") then
                     let index =
                         System.Random().Next(0, neighbourNodes.Length)
 
                     neighbourNodes.[index]
-                    <! ComputePushSum(sum1, weight, delta)
+                    <! ComputePushSum(sum, weight, delta)
                 else
                     let index = System.Random().Next(0, 5)
                     if (index < 4) then
@@ -119,23 +118,23 @@ type Node(listener: IActorRef, numResend: int, nodeNum: int) =
                             System.Random().Next(0, neighbourNodes.Length)
 
                         neighbourNodes.[nindex]
-                        <! ComputePushSum(sum1, weight, delta)
+                        <! ComputePushSum(sum, weight, delta)
                     else
                         let mutable fullindex = System.Random().Next(0, nodesCount - 1)
                         while (fullindex = nodeNum) do
                             fullindex <- System.Random().Next(0, nodesCount - 1)
                         totalNodes.[fullindex]
-                        <! ComputePushSum(sum1, weight, delta)
+                        <! ComputePushSum(sum, weight, delta)
             //elif (termRound>=3) then
             else
                 if (not convergence) then
-                    listener <! TerminationCheck(sum1, weight)
+                    listener <! TerminationCheck(sum, weight)
                     convergence <- true
 
                 //else
-                sum1 <- sum1 + s
+                sum <- sum + s
                 weight <- weight + w
-                sum1 <- sum1 / 2.0
+                sum <- sum / 2.0
                 weight <- weight / 2.0
                 epochCount <- epochCount + 1
                 if (topology <> "imp2D") then
@@ -143,7 +142,7 @@ type Node(listener: IActorRef, numResend: int, nodeNum: int) =
                         System.Random().Next(0, neighbourNodes.Length)
 
                     neighbourNodes.[index]
-                    <! ComputePushSum(sum1, weight, delta)
+                    <! ComputePushSum(sum, weight, delta)
                 else
                     let index = System.Random().Next(0, 5)
                     if (index < 4) then
@@ -151,13 +150,13 @@ type Node(listener: IActorRef, numResend: int, nodeNum: int) =
                             System.Random().Next(0, neighbourNodes.Length)
 
                         neighbourNodes.[nindex]
-                        <! ComputePushSum(sum1, weight, delta)
+                        <! ComputePushSum(sum, weight, delta)
                     else
                         let mutable fullindex = System.Random().Next(0, nodesCount - 1)
                         while (fullindex = nodeNum) do
                             fullindex <- System.Random().Next(0, nodesCount - 1)
                         totalNodes.[fullindex]
-                        <! ComputePushSum(sum1, weight, delta)
+                        <! ComputePushSum(sum, weight, delta)
 
 
         | _ -> failwith "unknown message"
