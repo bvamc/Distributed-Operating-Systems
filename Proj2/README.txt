@@ -21,3 +21,6 @@ Largest network dealed with:
 		b) 2D network topology: 100000 nodes
 		c) Imperfect 2D topology: 1000000 nodes
 		d) Line topology: 1000 nodes
+
+Example Usage: dotnet fsi .\proj2.fsx 1000 full push-sum
+Output: Time for convergence: 00:00:01.1960346

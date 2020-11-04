@@ -56,7 +56,7 @@ type Receiver() =
         | SetNumNodes numberofnodes -> numberOfNodes <- numberofnodes
         | IncrementConvergedNodes count -> 
             numberOfConvergedNodes <- numberOfConvergedNodes+1
-            printfn "Converged %i nodes" numberOfConvergedNodes
+            // printfn "Converged %i nodes" numberOfConvergedNodes
         | _ -> failwith "unknown message"
 
 type Node(listener: IActorRef, numResend: int, nodeNum: int) =
