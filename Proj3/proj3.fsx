@@ -374,7 +374,7 @@ type PastryNode() =
         |Forward forwardMessage ->
             let mutable hops = forwardMessage.noHops
             let mutable next = route nodeId forwardMessage.des forwardMessage.level "route"
-            if next = "" then
+            if next = "" || hops>=10 then
                 masterNode<!Finished hops
             else 
                 hops <- hops+1
