@@ -170,7 +170,7 @@ type PastryNode() =
                 else if func="route" then
                     if String.Compare(routingTable.[level,dl], dest) <= 0 then
                         next <- routingTable.[level,dl]
-                        printfn "From RT : %A" next
+                        // printfn "From RT : %A" next
                         found <- true
         
         //Search Nearby
@@ -292,7 +292,6 @@ type PastryNode() =
                 else
                     tempSmallL <- List.append tempSmallL [currentDec]
                     tempSmallL <- List.sort tempSmallL
-        //printfn "Inside New Small %i" tempSmallL.Length        
         tempSmallL
 
     let makeRoute =
@@ -311,12 +310,12 @@ type PastryNode() =
         match rmsg :?> NodeMessages with
         | FirstJoin rid ->
             nodeId <- rid
-            printfn "First Node being added : %A" nodeId
+            // printfn "First Node being added : %A" nodeId
             masterNode <! Joined nodeId
 
         | Join rid ->
             nodeId <- rid
-            printfn "New Node to be added : %A" nodeId
+            // printfn "New Node to be added : %A" nodeId
             actorsArray.[dic.GetValueOrDefault(rid)-1] <! AddMe {rid = rid; rtable = routingTable; largeLeafSet = largeLeafSet; smallLeafSet = smallLeafSet; level = 0;}
         
         | AddMe routeMsg ->
@@ -346,21 +345,18 @@ type PastryNode() =
 
             let nodeIdx = dic.GetValueOrDefault(routeMsg.rid,0)
             if not lastHop then
-                //let nextPeer = dic.GetValueOrDefault(next)
                 actorsArray.[nodeIdx] <! NextPeer {nextPeer = next;dRouteTable=destinationRouteTable; dLargeLeafSet=deliverLargeT; dSmallLeafSet=deliverSmallT; level=level}
             else
                 actorsArray.[nodeIdx] <! Deliver {dRouteTable = destinationRouteTable; dLargeLeafSet=deliverLargeT; dSmallLeafSet=deliverSmallT}
 
 
-            printfn "Next Node : %A" next
+            // printfn "Next Node : %A" next
 
         | Deliver deliverMsg -> 
             routingTable <- deliverMsg.dRouteTable
             largeLeafSet <- deliverMsg.dLargeLeafSet
             smallLeafSet <- deliverMsg.dSmallLeafSet
             makeRoute
-            // printfn "largeLeafSet size : %i" largeLeafSet.Length
-            // printfn "smallLeafSet size : %i" smallLeafSet.Length
             masterNode <! Joined nodeId
         | NextPeer nextPeerMsg -> 
             routingTable <- nextPeerMsg.dRouteTable
@@ -371,10 +367,8 @@ type PastryNode() =
         
         | StartRouting message ->
             let key = getRandomKey
-            printfn "Random Key: %A" key
             let level = shl(nodeId,key)
             let id = dic.GetValueOrDefault(nodeId,0)
-            // printfn "Starting routing from %A" actorsArray.[id]
             actorsArray.[id] <! Forward  {des = key; level = level; noHops = 0}
 
         |Forward forwardMessage ->
@@ -386,17 +380,16 @@ type PastryNode() =
                 hops <- hops+1
                 let newlevel = shl(forwardMessage.des,next)
                 let id = dic.GetValueOrDefault(next,0)
-                //printfn "Forwarding from %A to %A for destination %A" actorsArray.[id] next forwardMessage.des
                 actorsArray.[id] <! Forward {des = forwardMessage.des; level = newlevel; noHops = hops}
         // |PrintLeaf id ->
             //for i in [0..largeLeafSet.Length] do+
             
-              //  printfn "%A LargeLeaf" largeLeafSet.[i] 
+            // printfn "%A LargeLeaf" largeLeafSet.[i] 
 
             //for i in [0..smallLeafSet.Length] do
               //  printfn "%A SmallLeaf" smallLeafSet.[i]     
-            printfn "Node %i Lset" largeLeafSet.Length
-            printfn "Node %i Sset" smallLeafSet.Length
+            // printfn "Node %i Lset" largeLeafSet.Length
+            // printfn "Node %i Sset" smallLeafSet.Length
             // printfn "Routing Table %A %A " nodeId routingTable 
         
         | _ -> failwith "unknown message"
@@ -430,28 +423,26 @@ type Master() =
         | Joined nodeId ->
             countOfNodes <- countOfNodes + 1
             if countOfNodes >= numNodes - 1 then
-                printfn "All Nodes joined"
-             
+                printfn "All Nodes joined."
+                printfn "Initiating routing."
                 for i in [0 .. actorsArray.Length-1] do
                     for j in [0..numReqs-1] do
-                        //actorsArray.[i] <! PrintLeaf "id"
+                        // actorsArray.[i] <! PrintLeaf "id"
                         actorsArray.[i] <! StartRouting "Message"
             else 
-                printfn "Joined" 
+                // printfn "Joined" 
                 masterNode <! Init countOfNodes
         |Finished numberOfhops ->
-            // printfn "number of hops taken: %i" numberOfhops
             finishedNodes <- finishedNodes + 1
-            // printfn "finishedNodes: %i" finishedNodes
             finishedHops <- finishedHops + numberOfhops
             if(finishedNodes >= (numNodes * numReqs)) then
                 
                 printfn "All nodes have finished routing ...\n"
-                printfn "================================================================================================================================"
-                printfn "TOTAL ROUTES = %A" (numNodes * numReqs)
-                printfn "TOTAL HOPS = %A" finishedHops
-                printfn "AVERAGE HOPS PER ROUTE = %A" ( (double) finishedHops / ( ((double) numNodes) * ((double) numReqs)))
-                printfn "================================================================================================================================"
+                printfn "******************************"
+                printfn "Total routes count = %A" (numNodes * numReqs)
+                printfn "Total requests count = %A" finishedHops
+                printfn "Average number of request = %A" ( (double) finishedHops / ( ((double) numNodes) * ((double) numReqs)))
+                printfn "******************************"
                 Environment.Exit(0)
 
         | _ -> failwith "unknown message"
