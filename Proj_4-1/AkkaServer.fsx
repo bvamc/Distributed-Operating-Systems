@@ -56,17 +56,27 @@ type Tweet(tweet_id:string, text:string, is_re_tweet:bool) =
 
 type User(user_name:string, password:string) =
     let mutable subscribes = List.empty: User list
+    let mutable subscribers = List.empty: User list
     let mutable tweets = List.empty: Tweet list
+    let mutable loggedIn = true
     member this.user_name = user_name
     member this.password = password
     member this.addSubscribe x =
         subscribes <- List.append subscribes [x]
+    member this.addSubscriber x =
+        subscribers <- List.append subscribers [x]
     member this.getSubscribes() =
         subscribes
+    member this.getSubscribers() =
+        subscribers
     member this.addTweet x =
         tweets <- List.append tweets [x]
     member this.getTweets() =
         tweets
+    member this.logout() =
+        loggedIn <- false
+    member this.isLoggedIn() = 
+        loggedIn
     override this.ToString() = 
        this.user_name
        
@@ -132,6 +142,12 @@ type Twitter() =
                 let user = users.[username]
                 user.addTweet tweet
                 this.AddTweet tweet
+
+                for subUser in user.getSubscribers() do
+                    if subUser.isLoggedIn() then
+                        printfn "Sending %s" ("akka.tcp://RemoteFSharp@localhost:8123/user/"+subUser.ToString())
+                        let subUserActor = system.ActorSelection("akka.tcp://RemoteFSharp@localhost:8123/user/"+subUser.ToString())
+                        subUserActor <! "RecievedTweet,"+tweet.text
                 let idx1 = text.IndexOf("#")
                 if not (idx1 = -1) then
                     let idx2 = text.IndexOf(" ",idx1)
@@ -168,6 +184,7 @@ type Twitter() =
             let user1 = this.getUser username1
             let user2 = this.getUser username2
             user1.addSubscribe user2
+            user2.addSubscriber user1
             res <- "[success] " + username1 + " subscribe " + username2
         res
     member this.reTweet username password text =
@@ -197,6 +214,15 @@ type Twitter() =
         else
             let res1 = mentions.[mention] |>  List.map(fun x->x.ToString()) |> String.concat "\n"
             res <-  "[success] queryMention" + "\n" + res1
+        res
+    member this.logout username password =
+        let mutable res = ""
+
+        if not (this.authentication username password) then
+            res <- "error, authentication fail"
+        else
+            let user = this.getUser username
+            user.logout()  
         res
     override this.ToString() =
         "print the entire Twitter"+ "\n" + tweets.ToString() + "\n" + users.ToString() + "\n" + hashtags.ToString() + "\n" + mentions.ToString()
@@ -258,6 +284,8 @@ type MessagePack_queryTweetsSubscribed = MessagePack5 of  string  * string  * st
 type MessagePack_hashtag = MessagePack6 of  string  * string   
 // actor @, queryHashTag:  "POST", "at" 
 type MessagePack_at = MessagePack7 of  string  * string  
+//actor logout
+type MessagePack_logout = MessagePack9 of  string* string
 
 // The 1st actor is for reg
 let actor_reg (mailbox: Actor<_>) = 
@@ -266,7 +294,10 @@ let actor_reg (mailbox: Actor<_>) =
         let sender = mailbox.Sender()
         match message  with
         |   MessagePack1(POST,register,username,password) ->
+            if username = "" then
+                return! loop()
             let res = twitter.register username password
+            printfn "%s" res
             sender <? res |> ignore
         | _ ->  failwith "unknown message"
         return! loop()     
@@ -352,6 +383,20 @@ let actor_at (mailbox: Actor<_>) =
     }
     loop ()
 
+// The 8th actor is for logout
+let actor_logout (mailbox: Actor<_>) = 
+    let rec loop () = actor {        
+        let! message = mailbox.Receive ()
+        let sender = mailbox.Sender()
+        match message  with
+        |   MessagePack9(username,password) ->
+            let res = twitter.logout username password
+            sender <? res |> ignore
+        | _ ->  failwith "unknown message"
+        return! loop()     
+    }
+    loop ()
+
 ////////////////////////////////////////
 // opt is the operation we will use
 // opt= "reg", "send", "subscribe", "retweet", "querying", "#" , "@"
@@ -378,6 +423,7 @@ let actor_RETWEET = spawn system "processor4" actor_retweet
 let actor_QUERYING = spawn system "processor5" actor_querying 
 let actor_QUERHASHTAG = spawn system "processor6" actor_queryHashTag
 let actor_AT = spawn system "processor7" actor_at
+let actor_LOGOUT = spawn system "processor8" actor_logout
 
 // for the server, received string and dispatch
 let actor_msgreceived (mailbox: Actor<_>) = 
@@ -430,6 +476,8 @@ let actor_msgreceived (mailbox: Actor<_>) =
             if opt= "@" then
                 printfn "[@mention] %s" at
                 task <- actor_AT <? MessagePack7(POST,at )
+            if opt= "logout" then
+                task <- actor_LOGOUT <? MessagePack9(username,password)
             let response = Async.RunSynchronously (task, 1000)
             sender <? response |> ignore
             printfn "[Result]: %s" response
