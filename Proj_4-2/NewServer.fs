@@ -38,6 +38,7 @@ let SendLiveMessage (mailbox: Actor<LiveMsgOp>) =
         match msg  with
         |   LiveOp(msg,webSocket) ->
             socket{
+               printfn "Inside Socket"
                do! webSocket.send Text msg true 
             }
             
@@ -93,6 +94,8 @@ type Twitter() =
     let mutable usernameToUserObjMap = new Map<string,User>([])
     let mutable hashtagToTweetMap = new Map<string, Tweet list>([])
     let mutable mentionsToTweetMap = new Map<string, Tweet list>([])
+    member this.GetUserMap() = 
+         usernameToUserObjMap
     member this.AddUser (user:User) =
         usernameToUserObjMap <- usernameToUserObjMap.Add(user.UserName, user)
     member this.AddTweet (tweet:Tweet) =
@@ -139,20 +142,6 @@ type Twitter() =
                 user.AddTweet tweet
                 this.AddTweet tweet
 
-                for subUser in user.GetFollowers() do
-                    if subUser.IsLoggedIn() then
-                        //let subUserActor = system.ActorSelection("akka.tcp://TwitterSim@localhost:8666/user/"+subUser.ToString())
-                        //subUserActor <! "RecievedTweet,"+tweet.Text
-                        printfn "Sending message to %s %A" (subUser.ToString()) (subUser.GetSocket())
-                        let byteResponse =
-                              (string("RecievedTweet,"+tweet.Text))
-                              |> System.Text.Encoding.ASCII.GetBytes
-                              |> ByteSegment
-                        socket{
-                           do! subUser.GetSocket().send Text byteResponse true
-                        } |> ignore
-                        printfn ""
-                        
                 
                 let mentionStart = text.IndexOf("@")
                 if mentionStart <> -1 then
@@ -421,6 +410,34 @@ let ws (webSocket : WebSocket) (context: HttpContext) =
       
       | (Text, data, true) ->
         let str = UTF8.toString data
+
+
+        //
+        let inpMessage = str.Split ','
+        let mutable serverOperation= inpMessage.[0]
+        let mutable username=inpMessage.[2]
+        let mutable password=inpMessage.[3]
+        let mutable tweetData=inpMessage.[5]
+
+        // Check if it's send tweet operation
+        if serverOperation = "send" then
+            let user = twitter.GetUserMap().[username]
+            let isRetweet = false
+            let tweet = Tweet(DateTime.Now.ToFileTimeUtc() |> string, tweetData, isRetweet)
+            for subUser in user.GetFollowers() do
+                        if subUser.IsLoggedIn() then
+                            
+                            printfn "Sending message to %s %A" (subUser.ToString()) (subUser.GetSocket())
+                            let byteResponse =
+                                  (string("RecievedTweet,"+tweet.Text))
+                                  |> System.Text.Encoding.ASCII.GetBytes
+                                  |> ByteSegment
+                            
+                            do! subUser.GetSocket().send Text byteResponse true 
+                        
+        //
+
+
         let mutable task = apiActor <? SendOp(str,webSocket)
         let response = Async.RunSynchronously (task, 10000)
 
