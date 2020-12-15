@@ -1,22 +1,42 @@
 #load "references.fsx"
 #time "on"
+//#r "open FSharp.Json"
 
 open System
 open Akka.Actor
 open Akka.FSharp
 open System.Threading
+open FSharp.Json
 open WebSocketSharp
+open Akka.Configuration
+
 
 // number of user
-let args : string array = fsi.CommandLineArgs |> Array.tail
-let numberOfClients= args.[0] |> int
-let numberOfRandomOps = numberOfClients
-let mutable i = 0
-let logoutPercentage = 95
+let configuration = 
+    ConfigurationFactory.ParseString(
+        @"akka {
+            log-config-on-start : on
+            stdout-loglevel : OFF
+            loglevel : OFF
+            actor {
+                provider = ""Akka.Remote.RemoteActorRefProvider, Akka.Remote""
+                debug : {
+                    receive : on
+                    autoreceive : on
+                    lifecycle : on
+                    event-stream : on
+                    unhandled : on
+                }
+            }
+            remote {
+                helios.tcp {
+                    port = 8555
+                    hostname = localhost
+                }
+            }
+        }")
 
-
-let system = ActorSystem.Create("TwitterSim")
-
+let system = ActorSystem.Create("TwitterSim", configuration)
 let echoServer = new WebSocket("ws://localhost:8080/websocket")
 echoServer.OnOpen.Add(fun args -> System.Console.WriteLine("Open"))
 echoServer.OnClose.Add(fun args -> System.Console.WriteLine("Close"))
@@ -38,7 +58,17 @@ let IncrementCount (mailbox: Actor<_>)=
     loop ()
 
 let incrementCount = spawn system "incrementCount" IncrementCount
-let random = System.Random(1)
+
+type MessageType = {
+    OperationName : string
+    UserName : string
+    Password : string
+    SubscribeUserName : string
+    TweetData : string
+    Queryhashtag : string
+    QueryAt : string
+}
+
 let TwitterClient (mailbox: Actor<string>)=
     let mutable userName = ""
     let mutable password = ""
@@ -54,6 +84,8 @@ let TwitterClient (mailbox: Actor<string>)=
             userName <- result.[1]
             password <- result.[2]
             let serverOp = "reg"+","+" "+","+userName+","+password+","+" "+","+" "+","+" "+","+" "+","+" "
+
+            //let serverJson: MessageType = {OperationName = "reg"; UserName = userName; Password = password; SubscribeUserName = ""; TweetData = ""; Queryhashtag = ""; QueryAt = ""} 
             //echoServer <! serverOp
             echoServer.Send serverOp
             //printfn "[command]%s" serverOp
@@ -71,27 +103,6 @@ let TwitterClient (mailbox: Actor<string>)=
             //printfn "%s" ""
             //incrementCount <! 1
             return! loop()
-        else if operation = "RandomOp" then
-            let mutable chooseOperation = Random( ).Next() % 7
-            let mutable operation = "logout"           
-            let mutable httpOperation = "POST"
-            let mutable subscribeToUser = "user"+random.Next(numberOfClients) .ToString()
-            let mutable queryhashtag = "#topic"+random.Next(numberOfClients) .ToString()
-            let mutable at = "@user"+random.Next(numberOfClients) .ToString()
-            let mutable tweetData = "tweet"+random.Next(numberOfClients) .ToString()+"... " + queryhashtag + "..." + at + " " 
-            let mutable register = "register"
-            if chooseOperation=0 then  operation <-"#"
-            if chooseOperation=1 then  operation <-"retweet"
-            if chooseOperation=2 then  operation <-"subscribe"
-            if chooseOperation=3 then  operation <-"send"
-            if chooseOperation=4 then  operation <-"@"
-            if chooseOperation=5 then  operation <-"logout"
-            if chooseOperation=6 then  operation <-"querying" 
-            let serverOp = operation+","+httpOperation+","+userName+","+password+","+subscribeToUser+","+tweetData+","+queryhashtag+","+at+","+register
-            echoServer.Send serverOp
-            //let task = echoServer <? serverOp
-            //let response = Async.RunSynchronously (task, 10000)
-            sender <? "success" |> ignore 
         else if operation = "Subscribe" then
             let serverOp = "subscribe, ,"+userName+","+password+","+result.[1]+", , , , "
             echoServer.Send serverOp
@@ -107,7 +118,7 @@ let TwitterClient (mailbox: Actor<string>)=
             lastUserSubscribed <- true
             sender <? "success" |> ignore 
         else if operation = "SendTweet" then
-            let serverOp = "send, ,"+userName+","+password+", ,tweet from "+userName+"_"+result.[1]+"th @user"+(string (random.Next(numberOfClients)))+" #topic"+(string (random.Next(numberOfClients)))+" , , , "
+            let serverOp = "send, ,"+userName+","+password+", ,tweet from "+userName+" "+result.[1]+" , , , "
             echoServer.Send serverOp
             //let task = echoServer <? serverOp
             //let response = Async.RunSynchronously (task, 10000)
@@ -130,7 +141,7 @@ let TwitterClient (mailbox: Actor<string>)=
             //echoServer <! "logout, ,"+userName+","+password+", , , , , "
             echoServer.Send ("logout, ,"+userName+","+password+", , , , , ")
         else if operation = "QueryHashtags" then
-            let serverOp = "#, , , , , ,#topic"+(string (random.Next(numberOfClients)))+", ,"
+            let serverOp = "#, , , , , ,"+result.[1]+", ,"
             echoServer.Send serverOp
             //let task = echoServer <? serverOp
             //let response = Async.RunSynchronously (task, 10000)
@@ -139,7 +150,7 @@ let TwitterClient (mailbox: Actor<string>)=
             //printfn "%s" ""
             sender <? "success" |> ignore 
         else if operation = "QueryMentions" then
-            let serverOp = "@, , , , , , ,@user"+(string (random.Next(numberOfClients)))+","
+            let serverOp = "@, , , , , , ,"+result.[1]+","
             echoServer.Send serverOp
             //let task = echoServer <? serverOp
             //let response = Async.RunSynchronously (task, 10000)
@@ -151,6 +162,7 @@ let TwitterClient (mailbox: Actor<string>)=
     }
     loop ()
 //
+(*
 let clients = Array.zeroCreate (10)
 for id in 0..1 do
     clients.[id] <- spawn system ("User"+(string id)) TwitterClient
@@ -164,6 +176,47 @@ while true do
     Thread.Sleep(5000)
     clients.[0] <! "SendTweet,"+(string 1)
     a <- a + 1
+*)
+// Register,username,password
+
+let client = spawn system ("User"+(string 1)) TwitterClient
+let rec readInput () =
+    Console.Write("Enter command: ")
+    let input = Console.ReadLine()
+    let inpMessage = input.Split ','
+    let serverOp = inpMessage.[0]
+    
+    match (serverOp) with
+    | "Register" -> 
+        let username = inpMessage.[1]
+        let password = inpMessage.[2]    
+        client <! "Register,"+username+","+password
+        readInput()
+    | "Subscribe" ->
+        let username = inpMessage.[1] 
+        client <! "SyncSubscribe,"+username
+        readInput()
+    | "Send" ->
+        let message = inpMessage.[1] 
+        client <! "SendTweet,"+message
+        readInput()
+    | "Query" ->
+        client <! "Querying"
+        readInput()
+    | "QueryHashtag" ->
+        client <! "QueryHashtags,"+inpMessage.[1]
+        readInput()
+    | "QueryMention" ->
+        client <! "QueryMentions,"+inpMessage.[1]
+        readInput()
+    | "Exit" ->
+        printfn "Exiting Client!"
+    | _ -> 
+        printfn "Invalid Input, Please refer the Report"
+        readInput()
+
+
+readInput()
 (*printfn "*************************************" 
 printfn "Starting Client registrations!   " 
 printfn "*************************************"

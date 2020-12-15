@@ -20,6 +20,7 @@
     <PkgFSharp_Core Condition=" '$(PkgFSharp_Core)' == '' ">/Users/gowtham/.nuget/packages/fsharp.core/5.0.0</PkgFSharp_Core>
     <PkgSuave Condition=" '$(PkgSuave)' == '' ">/Users/gowtham/.nuget/packages/suave/2.6.0</PkgSuave>
     <PkgNewtonsoft_Json Condition=" '$(PkgNewtonsoft_Json)' == '' ">/Users/gowtham/.nuget/packages/newtonsoft.json/12.0.3</PkgNewtonsoft_Json>
+    <PkgFSharp_Json Condition=" '$(PkgFSharp_Json)' == '' ">/Users/gowtham/.nuget/packages/fsharp.json/0.4.0</PkgFSharp_Json>
     <PkgAkka Condition=" '$(PkgAkka)' == '' ">/Users/gowtham/.nuget/packages/akka/1.4.10</PkgAkka>
     <PkgAkka_Remote Condition=" '$(PkgAkka_Remote)' == '' ">/Users/gowtham/.nuget/packages/akka.remote/1.4.12</PkgAkka_Remote>
     <PkgAkka_FSharp Condition=" '$(PkgAkka_FSharp)' == '' ">/Users/gowtham/.nuget/packages/akka.fsharp/1.4.10</PkgAkka_FSharp>

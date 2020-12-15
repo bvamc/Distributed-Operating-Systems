@@ -52,3 +52,4 @@
 /Users/gowtham/Desktop/Proj_4-2/obj/Debug/netcoreapp5.0/Proj4-1.pdb
 /Users/gowtham/Desktop/Proj_4-2/obj/Debug/netcoreapp5.0/Proj4-1.genruntimeconfig.cache
 /Users/gowtham/Desktop/Proj_4-2/bin/Debug/netcoreapp5.0/websocket-sharp.dll
+/Users/gowtham/Desktop/Proj_4-2/bin/Debug/netcoreapp5.0/FSharp.Json.dll
