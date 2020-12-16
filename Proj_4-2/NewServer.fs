@@ -2,6 +2,7 @@ open System
 open Akka.Actor
 open Akka.FSharp
 
+open FSharp.Json
 open Suave
 open Suave.Http
 open Suave.Operators
@@ -29,23 +30,7 @@ type ServerOps =
 
 let system = ActorSystem.Create("TwitterServer")
 
-type LiveMsgOp =
-    | LiveOp of ByteSegment* WebSocket
 
-let SendLiveMessage (mailbox: Actor<LiveMsgOp>) = 
-    let rec loop () = actor {        
-        let! msg = mailbox.Receive ()
-        match msg  with
-        |   LiveOp(msg,webSocket) ->
-            socket{
-               printfn "Inside Socket"
-               do! webSocket.send Text msg true 
-            }
-            
-            return! loop()     
-    }
-    loop ()
-let sendLiveMsg = spawn system "SendLiveMessage" SendLiveMessage
 
 type Tweet(tweetId:string, text:string, isRetweet:bool) =
     member this.Text = text
@@ -145,17 +130,23 @@ type Twitter() =
                 
                 let mentionStart = text.IndexOf("@")
                 if mentionStart <> -1 then
-                    let mentionEnd = text.IndexOf(" ",mentionStart)
+                    let mutable mentionEnd = text.IndexOf(" ",mentionStart)
+                    if mentionEnd = -1 then
+                        mentionEnd <- text.Length
                     let mention = text.[mentionStart..mentionEnd-1]
                     this.AddToMention mention tweet
                 
                 let hashStart = text.IndexOf("#")
                 if hashStart <> -1 then
-                    let hashEnd = text.IndexOf(" ",hashStart)
+                    let mutable hashEnd = text.IndexOf(" ",hashStart)
+                    if hashEnd = -1 then
+                        hashEnd <- text.Length
                     let hashtag = text.[hashStart..hashEnd-1]
                     this.AddToHashTag hashtag tweet
                 
                 res <-  "[Sendtweet][Success]: Sent "+tweet.ToString()
+                printfn "%A" hashtagToTweetMap
+                printfn "Mention to tweet%A" mentionsToTweetMap
         res
     member this.Authentication username password =
             let mutable res = false
@@ -334,8 +325,19 @@ let ActorLogout (mailbox: Actor<_>) =
 
 let actorLogout = spawn system "actorLogout" ActorLogout
 
+type MessageType = {
+    OperationName : string
+    UserName : string
+    Password : string
+    SubscribeUserName : string
+    TweetData : string
+    Queryhashtag : string
+    QueryAt : string
+}
+
+
 type ApiActorOp =
-    | SendOp of string* WebSocket
+    | SendOp of MessageType* WebSocket
 
 let ApiActor (mailbox: Actor<ApiActorOp>) = 
     let rec loop () = actor {        
@@ -343,17 +345,17 @@ let ApiActor (mailbox: Actor<ApiActorOp>) =
         let sender = mailbox.Sender()
         match msg  with
         |   SendOp(msg,webSocket) ->
-            if msg="" then
-                return! loop() 
+            //if msg="" then
+              //  return! loop() 
             //Parse Message
-            let inpMessage = msg.Split ','
-            let mutable serverOperation= inpMessage.[0]
-            let mutable username=inpMessage.[2]
-            let mutable password=inpMessage.[3]
-            let mutable subsribeUsername=inpMessage.[4]
-            let mutable tweetData=inpMessage.[5]
-            let mutable queryhashtag=inpMessage.[6]
-            let mutable at=inpMessage.[7]
+            //let inpMessage = msg.Split ','
+            let mutable serverOperation= msg.OperationName
+            let mutable username=msg.UserName
+            let mutable password=msg.Password
+            let mutable subsribeUsername=msg.SubscribeUserName
+            let mutable tweetData=msg.TweetData
+            let mutable queryhashtag=msg.Queryhashtag
+            let mutable at=msg.QueryAt
             let mutable task = actorReg <? Register("","",webSocket)
             if serverOperation= "reg" then
                 printfn "[Register] username:%s password: %s" username password
@@ -411,13 +413,13 @@ let ws (webSocket : WebSocket) (context: HttpContext) =
       | (Text, data, true) ->
         let str = UTF8.toString data
 
-
+        let json = Json.deserialize<MessageType> str
+        printfn "%s" json.OperationName
         //
-        let inpMessage = str.Split ','
-        let mutable serverOperation= inpMessage.[0]
-        let mutable username=inpMessage.[2]
-        let mutable password=inpMessage.[3]
-        let mutable tweetData=inpMessage.[5]
+        let mutable serverOperation= json.OperationName
+        let mutable username=json.UserName
+        let mutable password=json.Password
+        let mutable tweetData=json.TweetData
 
         // Check if it's send tweet operation
         if serverOperation = "send" then
@@ -438,7 +440,7 @@ let ws (webSocket : WebSocket) (context: HttpContext) =
         //
 
 
-        let mutable task = apiActor <? SendOp(str,webSocket)
+        let mutable task = apiActor <? SendOp(json,webSocket)
         let response = Async.RunSynchronously (task, 10000)
 
         let byteResponse =

@@ -10,8 +10,8 @@ let configuration =
     ConfigurationFactory.ParseString(
         @"akka {
             log-config-on-start : on
-            stdout-loglevel : DEBUG
-            loglevel : ERROR
+            stdout-loglevel : OFF
+            loglevel : OFF
             actor {
                 provider = ""Akka.Remote.RemoteActorRefProvider, Akka.Remote""
                 debug : {

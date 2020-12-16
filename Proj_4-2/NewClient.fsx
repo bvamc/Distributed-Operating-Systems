@@ -1,6 +1,6 @@
 #load "references.fsx"
 #time "on"
-//#r "open FSharp.Json"
+
 
 open System
 open Akka.Actor
@@ -58,7 +58,6 @@ let IncrementCount (mailbox: Actor<_>)=
     loop ()
 
 let incrementCount = spawn system "incrementCount" IncrementCount
-
 type MessageType = {
     OperationName : string
     UserName : string
@@ -68,6 +67,7 @@ type MessageType = {
     Queryhashtag : string
     QueryAt : string
 }
+
 
 let TwitterClient (mailbox: Actor<string>)=
     let mutable userName = ""
@@ -83,43 +83,27 @@ let TwitterClient (mailbox: Actor<string>)=
         if operation = "Register" then
             userName <- result.[1]
             password <- result.[2]
-            let serverOp = "reg"+","+" "+","+userName+","+password+","+" "+","+" "+","+" "+","+" "+","+" "
+            //let serverOp = "reg"+","+" "+","+userName+","+password+","+" "+","+" "+","+" "+","+" "+","+" "
 
-            //let serverJson: MessageType = {OperationName = "reg"; UserName = userName; Password = password; SubscribeUserName = ""; TweetData = ""; Queryhashtag = ""; QueryAt = ""} 
+            let serverJson: MessageType = {OperationName = "reg"; UserName = userName; Password = password; SubscribeUserName = ""; TweetData = ""; Queryhashtag = ""; QueryAt = ""} 
+            let json = Json.serialize serverJson
             //echoServer <! serverOp
-            echoServer.Send serverOp
+            echoServer.Send json
             //printfn "[command]%s" serverOp
             incrementCount <! 1
             return! loop()  
-        else if operation = "SyncRegister" then
-            userName <- result.[1]
-            password <- result.[2]
-            let serverOp = "reg"+","+" "+","+userName+","+password+","+" "+","+" "+","+" "+","+" "+","+" "
-            echoServer.Send serverOp
-            //let task = echoServer <? serverOp
-            //let response = Async.RunSynchronously (task, 10000)
-            //printfn "[command]%s" serverOp
-            //printfn "[Reply]%s" (string(response))
-            //printfn "%s" ""
-            //incrementCount <! 1
-            return! loop()
         else if operation = "Subscribe" then
-            let serverOp = "subscribe, ,"+userName+","+password+","+result.[1]+", , , , "
-            echoServer.Send serverOp
+            //let serverOp = "subscribe, ,"+userName+","+password+","+result.[1]+", , , , "
+            //echoServer.Send serverOp
+
+            let serverJson: MessageType = {OperationName = "subscribe"; UserName = userName; Password = password; SubscribeUserName = result.[1]; TweetData = ""; Queryhashtag = ""; QueryAt = ""} 
+            let json = Json.serialize serverJson
+            echoServer.Send json
             //echoServer <! serverOp
-        else if operation = "SyncSubscribe" then
-            let serverOp = "subscribe, ,"+userName+","+password+","+result.[1]+", , , , "
-            //let task = echoServer <? serverOp
-            echoServer.Send serverOp
-            //let response = Async.RunSynchronously (task, 10000)
-            //printfn "[command]%s" serverOp
-            //printfn "[Reply]%s" (string(response))
-            //printfn "%s" ""
-            lastUserSubscribed <- true
-            sender <? "success" |> ignore 
         else if operation = "SendTweet" then
-            let serverOp = "send, ,"+userName+","+password+", ,tweet from "+userName+" "+result.[1]+" , , , "
-            echoServer.Send serverOp
+            let serverJson: MessageType = {OperationName = "send"; UserName = userName; Password = password; SubscribeUserName = ""; TweetData = "tweet from "+userName+" "+result.[1]; Queryhashtag = ""; QueryAt = ""} 
+            let json = Json.serialize serverJson
+            echoServer.Send json
             //let task = echoServer <? serverOp
             //let response = Async.RunSynchronously (task, 10000)
             //printfn "[command]%s" serverOp
@@ -129,8 +113,11 @@ let TwitterClient (mailbox: Actor<string>)=
         else if operation = "RecievedTweet" then
             printfn "[%s] : %s" userName result.[1]  
         else if operation = "Querying" then
-            let serverOp = "querying, ,"+userName+","+password+", , , , , "
-            echoServer.Send serverOp
+          
+
+            let serverJson: MessageType = {OperationName = "querying"; UserName = userName; Password = password; SubscribeUserName = ""; TweetData = ""; Queryhashtag = ""; QueryAt = ""} 
+            let json = Json.serialize serverJson
+            echoServer.Send json
             //let task = echoServer <? serverOp
             //let response = Async.RunSynchronously (task, 10000)
             //printfn "[command]%s" serverOp
@@ -139,10 +126,15 @@ let TwitterClient (mailbox: Actor<string>)=
             sender <? "success" |> ignore 
         else if operation = "Logout" then
             //echoServer <! "logout, ,"+userName+","+password+", , , , , "
-            echoServer.Send ("logout, ,"+userName+","+password+", , , , , ")
+
+            let serverJson: MessageType = {OperationName = "logout"; UserName = userName; Password = password; SubscribeUserName = ""; TweetData = ""; Queryhashtag = ""; QueryAt = ""} 
+            let json = Json.serialize serverJson
+            echoServer.Send json
         else if operation = "QueryHashtags" then
-            let serverOp = "#, , , , , ,"+result.[1]+", ,"
-            echoServer.Send serverOp
+        
+            let serverJson: MessageType = {OperationName = "#"; UserName = userName; Password = password; SubscribeUserName = ""; TweetData = ""; Queryhashtag = result.[1]; QueryAt = ""} 
+            let json = Json.serialize serverJson
+            echoServer.Send json
             //let task = echoServer <? serverOp
             //let response = Async.RunSynchronously (task, 10000)
             //printfn "[command]%s" serverOp
@@ -150,8 +142,10 @@ let TwitterClient (mailbox: Actor<string>)=
             //printfn "%s" ""
             sender <? "success" |> ignore 
         else if operation = "QueryMentions" then
-            let serverOp = "@, , , , , , ,"+result.[1]+","
-            echoServer.Send serverOp
+            
+            let serverJson: MessageType = {OperationName = "@"; UserName = userName; Password = password; SubscribeUserName = ""; TweetData = ""; Queryhashtag =""; QueryAt =  result.[1]} 
+            let json = Json.serialize serverJson
+            echoServer.Send json
             //let task = echoServer <? serverOp
             //let response = Async.RunSynchronously (task, 10000)
             //printfn "[command]%s" serverOp
@@ -194,7 +188,7 @@ let rec readInput () =
         readInput()
     | "Subscribe" ->
         let username = inpMessage.[1] 
-        client <! "SyncSubscribe,"+username
+        client <! "Subscribe,"+username
         readInput()
     | "Send" ->
         let message = inpMessage.[1] 
