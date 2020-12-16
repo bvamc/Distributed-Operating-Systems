@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="NewServer.fs" />
+    <Compile Include="TwitterServer.fs" />
   </ItemGroup>
 
   <ItemGroup>

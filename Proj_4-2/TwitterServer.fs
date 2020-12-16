@@ -15,6 +15,8 @@ open Suave.Utils
 open Suave.Sockets
 open Suave.Sockets.Control
 open Suave.WebSocket
+open Newtonsoft.Json
+open Suave.Writers
 
 
 
@@ -27,6 +29,12 @@ type ServerOps =
     | QueryHashTag of   string   
     | QueryAt of   string  
     | Logout of  string* string
+
+type ResponseType = {
+    Status : string
+    Data : string
+}
+
 
 let system = ActorSystem.Create("TwitterServer")
 
@@ -81,6 +89,8 @@ type Twitter() =
     let mutable mentionsToTweetMap = new Map<string, Tweet list>([])
     member this.GetUserMap() = 
          usernameToUserObjMap
+    member this.GetTweetIdToTweetMap() = 
+        tweetIdToTweetMap
     member this.AddUser (user:User) =
         usernameToUserObjMap <- usernameToUserObjMap.Add(user.UserName, user)
     member this.AddTweet (tweet:Tweet) =
@@ -343,12 +353,14 @@ let ApiActor (mailbox: Actor<ApiActorOp>) =
     let rec loop () = actor {        
         let! msg = mailbox.Receive ()
         let sender = mailbox.Sender()
+        
         match msg  with
         |   SendOp(msg,webSocket) ->
             //if msg="" then
               //  return! loop() 
             //Parse Message
             //let inpMessage = msg.Split ','
+            printfn "%A" msg.OperationName
             let mutable serverOperation= msg.OperationName
             let mutable username=msg.UserName
             let mutable password=msg.Password
@@ -370,7 +382,7 @@ let ApiActor (mailbox: Actor<ApiActorOp>) =
                 printfn "[querying] username:%s password: %s" username password
                 task <- actorQuerying <? Querying(username,password )
             else if serverOperation= "retweet" then
-                printfn "[retweet] username:%s password: %s tweetData: %s" username password tweetData
+                printfn "[retweet] username:%s password: %s tweetData: %s" username password (twitter.GetTweetIdToTweetMap().[tweetData].Text)
                 task <- actorRetweet <? ReTweet(username,password,tweetData)
             else if serverOperation= "@" then
                 printfn "[@mention] %s" at
@@ -413,7 +425,7 @@ let ws (webSocket : WebSocket) (context: HttpContext) =
       | (Text, data, true) ->
         let str = UTF8.toString data
 
-        let json = Json.deserialize<MessageType> str
+        let mutable json = Json.deserialize<MessageType> str
         printfn "%s" json.OperationName
         //
         let mutable serverOperation= json.OperationName
@@ -436,7 +448,21 @@ let ws (webSocket : WebSocket) (context: HttpContext) =
                                   |> ByteSegment
                             
                             do! subUser.GetSocket().send Text byteResponse true 
-                        
+
+        if serverOperation = "retweet" then
+            let user = twitter.GetUserMap().[username]
+            let isRetweet = true
+            let tweet = Tweet(DateTime.Now.ToFileTimeUtc() |> string, twitter.GetTweetIdToTweetMap().[tweetData].Text, isRetweet)
+            for subUser in user.GetFollowers() do
+                        if subUser.IsLoggedIn() then
+                            
+                            printfn "Sending message to %s %A" (subUser.ToString()) (subUser.GetSocket())
+                            let byteResponse =
+                                  (string("[Retweet] RecievedTweet,"+tweet.Text))
+                                  |> System.Text.Encoding.ASCII.GetBytes
+                                  |> ByteSegment
+                            
+                            do! subUser.GetSocket().send Text byteResponse true                 
         //
 
 
@@ -480,12 +506,69 @@ let wsWithErrorHandling (webSocket : WebSocket) (context: HttpContext) =
     return successOrError
    } *)
 
+let handleQuery (username,password) = request (fun r ->
+  printfn "handlequery %s %s" username password
+  let serverJson: MessageType = {OperationName = "querying"; UserName = username; Password = password; SubscribeUserName = ""; TweetData = ""; Queryhashtag = ""; QueryAt = ""} 
+  let task = apiActor <? SendOp(serverJson,Unchecked.defaultof<WebSocket>)
+  let response = Async.RunSynchronously (task, 1000)
+  OK (sprintf "Tweets: %s" response)) 
+
+let handleQueryHashtags hashtag = request (fun r ->
+  let serverJson: MessageType = {OperationName = "#"; UserName = ""; Password = ""; SubscribeUserName = ""; TweetData = ""; Queryhashtag = "#"+hashtag; QueryAt = ""} 
+  let task = apiActor <? SendOp(serverJson,Unchecked.defaultof<WebSocket>)
+  let response = Async.RunSynchronously (task, 1000)
+  OK (sprintf "Tweets: %s" response)) 
+
+let handleQueryMentions mention = request (fun r ->
+  let serverJson: MessageType = {OperationName = "@"; UserName = ""; Password = ""; SubscribeUserName = ""; TweetData = ""; Queryhashtag = ""; QueryAt = "@"+mention} 
+  let task = apiActor <? SendOp(serverJson,Unchecked.defaultof<WebSocket>)
+  let response = Async.RunSynchronously (task, 1000)
+  OK (sprintf "Tweets: %s" response)) 
+
+
+
+type SendTweetType = {
+    Username: string
+    Password: string
+    Data : string
+}
+
+let getString (rawForm: byte[]) =
+    System.Text.Encoding.UTF8.GetString(rawForm)
+
+let fromJson<'a> json =
+    JsonConvert.DeserializeObject(json, typeof<'a>) :?> 'a
+
+let HandleTweet (tweet: SendTweetType) = 
+    let serverJson: MessageType = {OperationName = "send"; UserName = tweet.Username; Password = tweet.Password; SubscribeUserName = ""; TweetData = tweet.Data; Queryhashtag = ""; QueryAt = ""} 
+    let task = apiActor <? SendOp(serverJson,Unchecked.defaultof<WebSocket>)
+    let response = Async.RunSynchronously (task, 1000)
+    response
+
+let Test  = request (fun r ->
+    r.rawForm
+    |> getString
+    |> fromJson<SendTweetType>
+    |> HandleTweet
+    |> JsonConvert.SerializeObject
+    |> CREATED) >=> setMimeType "application/json"
+
+
+//let sendTweet (body : SendTweetType) = r
+
 let app : WebPart = 
   choose [
     path "/websocket" >=> handShake ws
     path "/websocketWithSubprotocol" >=> handShakeWithSubprotocol (chooseSubprotocol "test") ws
     //path "/websocketWithError" >=> handShake wsWithErrorHandling
-    //GET >=> choose [ path "/" >=> file "index.html"; browseHome ]
+    GET >=> choose [
+         pathScan "/query/%s/%s" handleQuery
+         pathScan "/queryhashtags/%s" handleQueryHashtags 
+         pathScan "/querymentions/%s" handleQueryMentions  
+         ]
+    POST >=> choose [
+         path "/sendtweet" >=> Test  
+         ]
     NOT_FOUND "Found no handlers." ]
 
 [<EntryPoint>]
