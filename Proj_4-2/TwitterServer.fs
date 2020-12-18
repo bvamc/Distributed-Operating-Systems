@@ -22,6 +22,7 @@ open Suave.Writers
 
 type ServerOps =
     | Register of string* string* WebSocket
+    | Login of string* string* WebSocket
     | Send of  string  * string* string* bool
     | Subscribe of   string  * string* string 
     | ReTweet of  string  * string * string
@@ -75,6 +76,8 @@ type User(userName:string, password:string, webSocket:WebSocket) =
         tweets
     member this.GetSocket() =
         socket
+    member this.SetSocket(webSocket) =
+        socket <- webSocket
     member this.IsLoggedIn() = 
         loggedIn
     member this.Logout() =
@@ -114,23 +117,27 @@ type Twitter() =
         map <- map.Add(key, List.append value [tweet])
         mentionsToTweetMap <- map
     member this.Register username password webSocket=
-        let mutable res = ""
+        //let mutable res = ""
+        let mutable res:ResponseType = {Status=""; Data=""}
         if usernameToUserObjMap.ContainsKey(username) then
-            res <- "[Register][Error]: Username already exists!"
+            res<-{Status="Error"; Data="Register: Username already exists!"}
+            //res <- "[Register][Error]: Username already exists!"
         else
             let user = User(username, password, webSocket)
             this.AddUser user
             user.AddToFollowing user
-
-            res <- "[Register][Sucess]: " + username + "  Added successfully! "
+            res<-{Status="Success"; Data="Register: Added successfully!"}
+            //res <- "[Register][Success]: " + username + "  Added successfully! "
         res
     member this.SendTweet username password text isRetweet =
-        let mutable res = ""
+        let mutable res:ResponseType = {Status=""; Data=""}
         if not (this.Authentication username password) then
-            res <- "[Sendtweet][Error]: Username & password do not match"
+            res<-{Status="Error"; Data="Sendtweet: Username & password do not match"}
+            //res <- "[Sendtweet][Error]: Username & password do not match"
         else
             if not (usernameToUserObjMap.ContainsKey(username))then
-                res <-  "[Sendtweet][Error]: Username not found"
+                res<-{Status="Error"; Data="Sendtweet: Username not found"}
+                //res <-  "[Sendtweet][Error]: Username not found"
             else
                 let user = usernameToUserObjMap.[username]
                 let tweet = Tweet(DateTime.Now.ToFileTimeUtc() |> string, text, isRetweet)
@@ -153,8 +160,8 @@ type Twitter() =
                         hashEnd <- text.Length
                     let hashtag = text.[hashStart..hashEnd-1]
                     this.AddToHashTag hashtag tweet
-                
-                res <-  "[Sendtweet][Success]: Sent "+tweet.ToString()
+                res<-{Status="Success"; Data="Sent: "+tweet.ToString()}
+                //res <-  "[Sendtweet][Success]: Sent "+tweet.ToString()
                 printfn "%A" hashtagToTweetMap
                 printfn "Mention to tweet%A" mentionsToTweetMap
         res
@@ -167,6 +174,20 @@ type Twitter() =
                 if user.Password = password then
                     res <- true
             res
+    member this.Login username password webSocket=
+            let mutable res :ResponseType = {Status=""; Data=""}
+            if not (usernameToUserObjMap.ContainsKey(username)) then
+                printfn "%s" "[Login][Error]: Username not found"
+                res <- {Status="Error"; Data="Login: Username not found"}
+            else
+                let user = usernameToUserObjMap.[username]
+                if user.Password = password then
+                   user.SetSocket(webSocket)
+                   res <- {Status="Success"; Data="User successfully logged in!"}
+                else
+                    res <- {Status="Error"; Data="Login: Username & password do not match"}
+
+            res
     member this.GetUser username = 
         let mutable res : User = Unchecked.defaultof<User>
         if not (usernameToUserObjMap.ContainsKey(username)) then
@@ -175,49 +196,60 @@ type Twitter() =
             res <- usernameToUserObjMap.[username]
         res
     member this.Subscribe username1 password username2 =
-        let mutable res = ""
+        let mutable res:ResponseType = {Status=""; Data=""}
         if not (this.Authentication username1 password) then
-            res <- "[Subscribe][Error]: Username & password do not match"
+            res <- {Status="Error"; Data="Subscribe: Username & password do not match"}
+            //res <- "[Subscribe][Error]: Username & password do not match"
         else
             let user1 = this.GetUser username1
             let user2 = this.GetUser username2
             user1.AddToFollowing user2
             user2.AddToFollowers user1
-            res <- "[Subscribe][Success]: " + username1 + " now following " + username2
+            res <- {Status="Success"; Data= username1 + " now following " + username2}
+            //res <- "[Subscribe][Success]: " + username1 + " now following " + username2
         res
     member this.ReTweet username password text =
-        let res = "[retweet]" + (this.SendTweet username password text true)
+        let temp = "[retweet]" + (this.SendTweet username password text true).Data
+        let res:ResponseType = {Status="Success"; Data=temp}
+        //let res = "[retweet]" + (this.SendTweet username password text true)
         res
     member this.QueryTweetsSubscribed username password =
-        let mutable res = ""
+        let mutable res:ResponseType = {Status=""; Data=""}
         if not (this.Authentication username password) then
-            res <- "[QueryTweets][Error]: Username & password do not match"
+            res <- {Status="Error"; Data="QueryTweets: Username & password do not match"}
+            //res <- "[QueryTweets][Error]: Username & password do not match"
         else
             let user = this.GetUser username
             let res1 = user.GetFollowing() |> List.map(fun x-> x.GetTweets()) |> List.concat |> List.map(fun x->x.ToString()) |> String.concat "\n"
-            res <- "[QueryTweets][Success] " + "\n" + res1
+            res <- {Status="Success"; Data= "\n" + res1}
+            //res <- "[QueryTweets][Success] " + "\n" + res1
         res
     member this.QueryHashTag hashtag =
-        let mutable res = ""
+        let mutable res:ResponseType = {Status=""; Data=""}
         if not (hashtagToTweetMap.ContainsKey(hashtag)) then
-            res <- "[QueryHashTags][Error]: No Hashtag with given String found"
+            res <- {Status="Error"; Data="QueryHashTags: No Hashtag with given String found"}
+            //res <- "[QueryHashTags][Error]: No Hashtag with given String found"
         else
             let res1 = hashtagToTweetMap.[hashtag] |>  List.map(fun x->x.ToString()) |> String.concat "\n"
-            res <- "[QueryHashTags][Success] " + "\n" + res1
+            res <- {Status="Success"; Data= "\n" + res1}
+            //res <- "[QueryHashTags][Success] " + "\n" + res1
         res
     member this.QueryMention mention =
-        let mutable res = ""
+        let mutable res:ResponseType = {Status=""; Data=""}
         if not (mentionsToTweetMap.ContainsKey(mention)) then
-            res <- "[QueryMentions][Error]: No mentions are found for the given user"
+            res <- {Status="Error"; Data="QueryMentions: No mentions are found for the given user"}
+            //res <- "[QueryMentions][Error]: No mentions are found for the given user"
         else
             let res1 = mentionsToTweetMap.[mention] |>  List.map(fun x->x.ToString()) |> String.concat "\n"
-            res <-  "[QueryMentions][Success]:" + "\n" + res1
+            res <- {Status="Success"; Data= "\n" + res1}
+            //res <-  "[QueryMentions][Success]:" + "\n" + res1
         res
     member this.Logout username password =
-        let mutable res = ""
+        let mutable res:ResponseType = {Status=""; Data=""}
 
         if not (this.Authentication username password) then
-            res <- "[Logout][Error]: Username & password do not match"
+            res <- {Status="Error"; Data="Logout: Username & password do not match"}
+            //res <- "[Logout][Error]: Username & password do not match"
         else
             let user = this.GetUser username
             user.Logout()  
@@ -243,6 +275,21 @@ let ActorReg (mailbox: Actor<_>) =
     loop ()
 
 let actorReg = spawn system "actorReg" ActorReg
+
+let ActorLogin (mailbox: Actor<_>) = 
+    let rec loop () = actor {        
+        let! msg = mailbox.Receive ()
+        match msg  with
+        |   Login(username,password,webSocket) ->
+            if username = "" then
+                return! loop()
+            mailbox.Sender() <? twitter.Login username password webSocket|> ignore
+        | _ ->  failwith "Invalid Operation "
+        return! loop()     
+    }
+    loop ()
+
+let actorLogin = spawn system "actorLogin" ActorLogin
 
 let ActorSend (mailbox: Actor<_>) = 
     let rec loop () = actor {        
@@ -372,6 +419,9 @@ let ApiActor (mailbox: Actor<ApiActorOp>) =
             if serverOperation= "reg" then
                 printfn "[Register] username:%s password: %s" username password
                 task <- actorReg <? Register(username,password,webSocket)
+            if serverOperation= "login" then
+                printfn "[Login] username:%s password: %s" username password
+                task <- actorLogin <? Login(username,password,webSocket)
             else if serverOperation= "send" then
                 printfn "[send] username:%s password: %s tweetData: %s" username password tweetData
                 task <- actorSend <? Send(username,password,tweetData,false)
@@ -383,7 +433,7 @@ let ApiActor (mailbox: Actor<ApiActorOp>) =
                 task <- actorQuerying <? Querying(username,password )
             else if serverOperation= "retweet" then
                 printfn "[retweet] username:%s password: %s tweetData: %s" username password (twitter.GetTweetIdToTweetMap().[tweetData].Text)
-                task <- actorRetweet <? ReTweet(username,password,tweetData)
+                task <- actorRetweet <? ReTweet(username,password,(twitter.GetTweetIdToTweetMap().[tweetData].Text))
             else if serverOperation= "@" then
                 printfn "[@mention] %s" at
                 task <- actorAt <? QueryAt(at )
@@ -392,9 +442,9 @@ let ApiActor (mailbox: Actor<ApiActorOp>) =
                 task <- actorQueryHashtag <? QueryHashTag(queryhashtag )
             else if serverOperation= "logout" then
                 task <- actorLogout <? Logout(username,password)
-            let response = Async.RunSynchronously (task, 1000)
+            let response: ResponseType = Async.RunSynchronously (task, 1000)
             sender <? response |> ignore
-            printfn "[Result]: %s" response
+            printfn "[Result]: [%s] : %s " response.Status response.Data
             return! loop()     
     }
     loop ()
@@ -455,8 +505,6 @@ let ws (webSocket : WebSocket) (context: HttpContext) =
             let tweet = Tweet(DateTime.Now.ToFileTimeUtc() |> string, twitter.GetTweetIdToTweetMap().[tweetData].Text, isRetweet)
             for subUser in user.GetFollowers() do
                         if subUser.IsLoggedIn() then
-                            
-                            printfn "Sending message to %s %A" (subUser.ToString()) (subUser.GetSocket())
                             let byteResponse =
                                   (string("[Retweet] RecievedTweet,"+tweet.Text))
                                   |> System.Text.Encoding.ASCII.GetBytes
@@ -467,10 +515,10 @@ let ws (webSocket : WebSocket) (context: HttpContext) =
 
 
         let mutable task = apiActor <? SendOp(json,webSocket)
-        let response = Async.RunSynchronously (task, 10000)
+        let response: ResponseType = Async.RunSynchronously (task, 10000)
 
         let byteResponse =
-          (string(response))
+          Json.serialize response
           |> System.Text.Encoding.ASCII.GetBytes
           |> ByteSegment
 
@@ -485,45 +533,33 @@ let ws (webSocket : WebSocket) (context: HttpContext) =
       | _ -> ()
     }
 
-(*
-/// An example of explictly fetching websocket errors and handling them in your codebase.
-let wsWithErrorHandling (webSocket : WebSocket) (context: HttpContext) = 
-   
-   let exampleDisposableResource = { new IDisposable with member __.Dispose() = printfn "Resource needed by websocket connection disposed" }
-   let websocketWorkflow = ws webSocket context
-   
-   async {
-    let! successOrError = websocketWorkflow
-    match successOrError with
-    // Success case
-    | Choice1Of2() -> ()
-    // Error case
-    | Choice2Of2(error) ->
-        // Example error handling logic here
-        printfn "Error: [%A]" error
-        exampleDisposableResource.Dispose()
-        
-    return successOrError
-   } *)
-
 let handleQuery (username,password) = request (fun r ->
   printfn "handlequery %s %s" username password
   let serverJson: MessageType = {OperationName = "querying"; UserName = username; Password = password; SubscribeUserName = ""; TweetData = ""; Queryhashtag = ""; QueryAt = ""} 
   let task = apiActor <? SendOp(serverJson,Unchecked.defaultof<WebSocket>)
-  let response = Async.RunSynchronously (task, 1000)
-  OK (sprintf "Tweets: %s" response)) 
+  let response: ResponseType = Async.RunSynchronously (task, 1000)
+  if response.Status = "Success" then
+    OK (sprintf "Tweets: %s" response.Data) 
+  else
+    NOT_FOUND (sprintf "Error: %s" response.Data))
 
 let handleQueryHashtags hashtag = request (fun r ->
   let serverJson: MessageType = {OperationName = "#"; UserName = ""; Password = ""; SubscribeUserName = ""; TweetData = ""; Queryhashtag = "#"+hashtag; QueryAt = ""} 
   let task = apiActor <? SendOp(serverJson,Unchecked.defaultof<WebSocket>)
   let response = Async.RunSynchronously (task, 1000)
-  OK (sprintf "Tweets: %s" response)) 
+  if response.Status = "Success" then
+    OK (sprintf "Tweets: %s" response.Data) 
+  else
+    NOT_FOUND (sprintf "Error: %s" response.Data))
 
 let handleQueryMentions mention = request (fun r ->
   let serverJson: MessageType = {OperationName = "@"; UserName = ""; Password = ""; SubscribeUserName = ""; TweetData = ""; Queryhashtag = ""; QueryAt = "@"+mention} 
   let task = apiActor <? SendOp(serverJson,Unchecked.defaultof<WebSocket>)
   let response = Async.RunSynchronously (task, 1000)
-  OK (sprintf "Tweets: %s" response)) 
+  if response.Status = "Success" then
+    OK (sprintf "Tweets: %s" response.Data) 
+  else
+    NOT_FOUND (sprintf "Error: %s" response.Data))
 
 
 
@@ -546,12 +582,18 @@ let HandleTweet (tweet: SendTweetType) =
     response
 
 let Test  = request (fun r ->
-    r.rawForm
-    |> getString
-    |> fromJson<SendTweetType>
-    |> HandleTweet
-    |> JsonConvert.SerializeObject
-    |> CREATED) >=> setMimeType "application/json"
+    let response = r.rawForm
+                |> getString
+                |> fromJson<SendTweetType>
+                |> HandleTweet
+    if response.Status = "Error" then
+        response
+            |> JsonConvert.SerializeObject
+            |> UNAUTHORIZED
+    else
+        response
+            |> JsonConvert.SerializeObject
+            |> CREATED) >=> setMimeType "application/json"
 
 
 //let sendTweet (body : SendTweetType) = r

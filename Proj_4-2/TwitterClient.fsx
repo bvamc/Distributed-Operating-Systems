@@ -44,18 +44,6 @@ echoServer.OnError.Add(fun args -> System.Console.WriteLine("Error: {0}", args.M
 
 echoServer.Connect()
 
-let mutable clientsCount = 0
-let mutable lastUserSubscribed = false
-clientsCount<-0
-let IncrementCount (mailbox: Actor<_>)=
-    let rec loop () = actor {
-        let! message = mailbox.Receive ()
-        clientsCount <- clientsCount + 1
-        return! loop()     
-    }
-    loop ()
-
-let incrementCount = spawn system "incrementCount" IncrementCount
 type MessageType = {
     OperationName : string
     UserName : string
@@ -84,7 +72,6 @@ let TwitterClient (mailbox: Actor<string>)=
             let serverJson: MessageType = {OperationName = "reg"; UserName = userName; Password = password; SubscribeUserName = ""; TweetData = ""; Queryhashtag = ""; QueryAt = ""} 
             let json = Json.serialize serverJson
             echoServer.Send json
-            incrementCount <! 1
             return! loop()  
         else if operation = "Subscribe" then
             let serverJson: MessageType = {OperationName = "subscribe"; UserName = userName; Password = password; SubscribeUserName = result.[1]; TweetData = ""; Queryhashtag = ""; QueryAt = ""} 
@@ -120,7 +107,13 @@ let TwitterClient (mailbox: Actor<string>)=
             let serverJson: MessageType = {OperationName = "retweet"; UserName = userName; Password = password; SubscribeUserName = ""; TweetData = result.[1]; Queryhashtag =""; QueryAt =  ""} 
             let json = Json.serialize serverJson
             echoServer.Send json
-            sender <? "success" |> ignore 
+            sender <? "success" |> ignore
+        else if operation = "Login" then
+            userName <- result.[1]
+            password <- result.[2]
+            let serverJson: MessageType = {OperationName = "login"; UserName = userName; Password = password; SubscribeUserName = ""; TweetData = ""; Queryhashtag = ""; QueryAt = ""} 
+            let json = Json.serialize serverJson
+            echoServer.Send json 
         return! loop()     
     }
     loop ()
@@ -138,6 +131,11 @@ let rec readInput () =
         let username = inpMessage.[1]
         let password = inpMessage.[2]    
         client <! "Register,"+username+","+password
+        readInput()
+    | "Login" -> 
+        let username = inpMessage.[1]
+        let password = inpMessage.[2]    
+        client <! "Login,"+username+","+password
         readInput()
     | "Subscribe" ->
         let username = inpMessage.[1] 
@@ -158,6 +156,9 @@ let rec readInput () =
         readInput()
     | "Retweet" ->
         client <! "Retweet,"+inpMessage.[1]
+        readInput()
+    | "Logout" ->
+        client <! "Logout"
         readInput()
     | "Exit" ->
         printfn "Exiting Client!"
