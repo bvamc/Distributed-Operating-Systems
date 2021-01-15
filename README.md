@@ -1,2 +1,2 @@
-# DOS-COP5615
-Distributed Operating Systems - UF
+# Distributed Operating Systems - UF
+
